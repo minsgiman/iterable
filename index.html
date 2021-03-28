@@ -1,0 +1,400 @@
+## 함수형 홀수 n개 더하기
+
+## 관점 바꾸기 1
+ - if를 filter로
+ - 값 변화 후 변수 할당을 map으로
+ - break를 take로
+ - 축약 및 합산을 reduce로
+
+<script>
+    const curry = f => (a, ...bs) => {
+        return bs.length === 0 ? (...bs) => f(a, ...bs) : f(a, ...bs);
+    }
+
+    const L = {};
+
+    L.filter = curry(function *(f, iter) {
+        for (const a of iter) {
+            //console.log('filter', a);
+            if (f(a)) yield a;
+        }
+    });
+
+    L.map = curry(function *(f, iter) {
+        for (const a of iter) {
+            yield f(a);
+        }
+    });
+
+    L.take = curry(function *(length, iter) {
+        for (const a of iter) {
+            yield a;
+            if (!--length) break;
+        }
+    });
+
+    const reduce = curry(function(f, acc, iter) {
+        if (arguments.length === 2) {
+            iter = acc[Symbol.iterator]();
+            acc = iter.next().value;
+        }
+        for (const a of iter) {
+            acc = f(acc, a);
+        }
+        return acc;
+    })
+
+    function f2(list, length) {
+        console.log(
+            reduce((a, b) => a + b, 0, 
+                L.take(length,
+                    L.map(a => a * a,
+                        L.filter(a => a % 2, list)
+                    )
+                )
+            )
+        );
+    }
+    f2([1, 2, 3, 4, 5, 7, 10, 11, 12, 13, 14, 15], 2);
+</script>
+
+## 관점 바꾸기2
+ - while을 range로
+
+ ## 관점 바꾸기3
+ - 효과를 구분하여 each로
+
+ <script>
+     L.range = function *(start, end, step = 1) {
+         if (arguments.length === 1) {
+             end = start;
+             start = 0;
+         }
+         while (start < end) {
+             yield start;
+             start += step;
+         }
+     }
+
+     const each = function(f, iter) {
+         for (const a of iter) {
+             f(a);
+         }
+         return iter;
+     };
+
+     function f4(end) {
+         each(console.log, L.range(1, end, 2))
+     }
+
+     f4(10);
+ </script>
+
+<script>
+    //console.clear();
+</script>
+
+# 일급을 이용한 합성
+
+<script>
+    const go = (a, ...fs) => reduce((a, f) => f(a), a, fs);
+
+    go(0,
+        a => a + 1,
+        a => a + 10,
+        a => a + 100,
+        a => a + 1000,
+        console.log);
+
+    function f5(list, length) {
+        go(list,
+            L.filter(a => a % 2),
+            L.map(a => a * a),
+            L.take(length),
+            reduce((a, b) => a + b),
+            console.log
+        );
+    }
+    //f5(L.range(Infinity), 3);
+    f5([1, 2, 3, 4, 5, 7, 10, 11, 12, 13, 14, 15], 3);
+</script>
+
+# 지연 평가와 엄격한 평가
+
+<script>
+  const map = curry((..._) => [...L.map(..._)]);
+  const filter = curry((f, iter) => [...L.filter(f, iter)]);
+  const take = curry((length, iter) => [...L.take(length, iter)]);
+  const range = (..._) => [...L.range(..._)];
+  const it = L.map(a => a + 10, [1,2,3]);
+
+  function ff5(list, length) {
+    go(list,
+      filter(a => a % 2),
+      map(a => a * a),
+      take(length),
+      reduce((a, b) => a + b),
+      console.log);
+  }
+  ff5(range(100), 50);
+</script>
+
+
+<script>
+    const isIter = a => !!(a && a[Symbol.iterator]);
+    const add = curry((a, b) => a + b);
+
+    L.flat = function *(iter) {
+        for (const a of iter) {
+            if (isIter(a)) {
+                for (const b of a) {
+                    yield b;
+                }
+            } else {
+                yield a;
+            }
+        }
+    }
+
+    go(
+        [[1, 2], 3, [4, 5], [6, 7, 8], [9, 10]],
+        L.flat,
+        L.filter(a => a % 2),
+        L.map(a => a * a),
+        L.take(2),
+        reduce(add),
+        console.log
+    );
+
+    const add10 = add(10);
+    console.log(add10(5));
+</script>
+
+# 리얼월드
+
+<script>
+    var users = [
+        { name: 'a', age: 21, family: [
+            { name: 'a1', age: 53 }, { name: 'a2', age: 47 },
+            { name: 'a3', age: 16 }, { name: 'a4', age: 14 }
+        ] },
+        { name: 'b', age: 24, family: [
+            { name: 'b1', age: 58 }, { name: 'b2', age: 51 },
+            { name: 'b3', age: 10 }, { name: 'b4', age: 22 }
+        ] },
+        { name: 'c', age: 31, family: [
+            { name: 'c1', age: 64 }, { name: 'c2', age: 62 }
+        ] },
+        { name: 'd', age: 20, family: [
+            { name: 'd1', age: 42 }, { name: 'd2', age: 42 },
+            { name: 'd3', age: 11 }, { name: 'd4', age: 7 }
+        ] }
+    ];
+    go(
+        users,
+        L.map(u => u.family),
+        L.flat,
+        L.filter(u => u.age < 20),
+        L.map(u => u.age),
+        L.take(3),
+        reduce(add),
+        console.log);
+</script>
+
+# 작은 함수들을 조합하여 함수 만들기
+
+## pipe
+
+<script>
+    const pipe = (...fs) => a => go(a, ...fs);
+
+    const f10 = pipe(
+        a => a + 1,
+        a => a + 10
+    );
+
+    console.log(f10(0));
+</script>
+
+## reject
+
+<script>
+    const not = a => !a;
+    const negate = f => pipe(f, not);
+    const reject = curry((f, iter) => filter(negate(f), iter));
+
+    console.log(filter(a => a % 2, [1, 2, 3]));
+    console.log(reject(a => a % 2, [1, 2, 3]));
+</script>
+
+## find, some, every
+
+<script>
+    const head = ([first]) => first;
+    const find = (f, iter) => go(
+        L.filter(f, iter),
+        L.take(1),
+        head
+    );
+
+    console.log(find(a => a % 2, [3, 5]));
+
+    const some = (f, iter) => go(
+        L.filter(f, iter),
+        L.take(1),
+        arr => arr.length,
+        not,
+        not
+    );
+
+    const every = (f, iter) => go(
+        L.filter(negate(f), iter),
+        L.take(1),
+        arr => !arr.length
+    );
+</script>
+
+## 객체를 이터러블 프로그래밍으로 다루기
+### values, entries, keys
+
+<script>
+    const log = console.log;
+
+    L.values = function *(obj) {
+        for (const k in obj) {
+            yield obj[k];
+        }
+    };
+
+    L.keys = function *(obj) {
+        for (const k in obj) {
+            yield k;
+        }
+    };
+
+    L.entries = function *(obj) {
+        for (const k in obj) {
+            yield [k, obj[k]];
+        }
+    };
+
+    const object = iter => reduce((obj, [k, v]) => (obj[k] = v, obj), {}, iter);
+
+    log(reduce(add, [1, 2, 3]));
+    log(reduce(add, L.values({a: 1, b: 2, c: 3, d: 4, e: 5})));
+    log(reduce(add, 
+        L.take(2, L.values({a: 1, b: 2, c: 3, d: 4, e: 5}))));
+    log( object([['a', 1], ['b', 2], ['c', 3]] ));
+</script>
+
+### mapObject
+
+<script>
+    const mapObject = (f, obj) => go(
+        obj,
+        L.entries,
+        L.map(([k , v]) => [k, f(v)]),
+        object
+    );
+
+    log(mapObject(v => v * 10, {a: 1, b: 2, c: 3}));
+</script>
+
+### pick
+
+<script>
+    const pick = (ks, obj) => go(
+        obj,
+        L.entries,
+        L.filter(([k]) => ks.includes(k)),
+        L.take(ks.length),
+        object
+    );
+
+    log(pick(['b', 'c'], {a: 1, b: 2, c: 3, d: 4, e: 5}));
+</script>
+
+## Map, Set
+
+<script>
+    let m1 = new Map();
+    m1.set('a', 1);
+    m1.set('b', 2);
+    m1.set('c', 3);
+    log(object(filter(([k]) => k != 'a', m1)));
+
+    let s1 = new Set();
+    s1.add(1);
+    s1.add(2);
+    s1.add(10);
+    log([...s1]);
+    log(reduce(add, s1));
+</script>
+
+## 사용자 정의 객체
+
+<script>
+class Model {
+  constructor(attrs = {}) {
+    this.attrs = attrs;
+  }
+  get(k) {
+    return this.attrs[k];
+  }
+  set(k, v) {
+    this.attrs[k] = v;
+    return this;
+  }
+}
+class Collection {
+  constructor(models = []) {
+    this.models = models;
+  }
+  at(idx) {
+    return this.models[idx];
+  }
+  add(model) {
+    this.models.push(model);
+    return this;
+  }
+  *[Symbol.iterator]() {
+    for (const model of this.models) {
+      yield model;
+    }
+  }
+}
+class Product extends Model {}
+class Products extends Collection {
+  static add(p1, p2) {
+    return new Product({
+      price: p1.get('price') + p2.get('price')
+    });
+  }
+}
+
+const products = new Products();
+products.add(new Product({ name: '반팔', price: 10000 }));
+products.add(new Product({ name: '케이스', price: 15000 }));
+products.add(new Product({ name: '후드', price: 25000 }));
+
+products.at(1).set('is_selected', true);
+products.at(2).set('is_selected', true);
+
+log(reduce(
+  (total, product) => total + product.get('price'),
+  0,
+  products));
+
+go(
+  products,
+  filter(p => p.get('is_selected')),
+  map(p => p.get('price')),
+  reduce(add),
+  log);
+
+go(
+  products,
+  reduce(Products.add),
+  log
+)
+</script>
